@@ -1,0 +1,4 @@
+load_from:
+  - python_file: migration_pipeline.py
+  - python_file: imdb_pipeline.py
+  - python_file: improved_imdb_pipeline.py

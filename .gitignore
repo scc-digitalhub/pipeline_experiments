@@ -1,0 +1,9 @@
+.vscode
+*/logs
+*/__pycache__
+dagster_home/tmp*
+dati-indices-imdb
+prefect_home/dask*
+tmp/download
+tmp/process*
+tmp/titles.csv

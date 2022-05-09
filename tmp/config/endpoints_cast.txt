@@ -1,0 +1,10 @@
+writer
+director
+animation_department
+costume_designer
+cinematographer
+camera_department
+sound_department
+visual_effects
+assistant_director
+art_department
