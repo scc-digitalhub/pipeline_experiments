@@ -7,7 +7,7 @@ from indices_imdb.downloader import Downloader
 from indices_imdb.businessparser import BusinessParser
 from indices_imdb.creditsparser import CreditsParser
 
-from dagster import job, op, graph, resource, make_values_resource, get_dagster_logger, DynamicOut, DynamicOutput, In, Out, Output, Nothing
+from dagster import job, op, graph, resource, make_values_resource, get_dagster_logger, static_partitioned_config, DynamicOut, DynamicOutput, In, Out, Nothing, Field, Array
 
 ############# Resource definition
 class MongoDBResource:
@@ -59,9 +59,17 @@ def mongodb_resource(init_context):
     yield client
     client.close_connection()
 
+############# Partitions definition
+CHUNK_SIZE = 15
+CHUNKS = [str(x) for x in range(0,5001,CHUNK_SIZE)]
+
+@static_partitioned_config(partition_keys=CHUNKS)
+def chunk_config(partition_key: str):
+    return {"ops": {"get_titles_dataframe": {"config": {"chunk_start": int(partition_key)}}}}
+
 ############# Op definition
-@op(required_resource_keys={"execution_params"})
-def get_input_apis(context) -> list:
+@op(out={"apis": Out(list)}, required_resource_keys={"execution_params"})
+def get_input_apis(context):
     data_dir = context.resources.execution_params["data_directory"]
     nginx_host = context.resources.execution_params["nginx_host"]
     overwrite = context.resources.execution_params["overwrite"]
@@ -90,40 +98,29 @@ def get_input_apis(context) -> list:
             api_dicts.append(api_dict)
     return api_dicts
 
-@op(out=DynamicOut(), required_resource_keys={"execution_params"})
+@op(
+    out=DynamicOut(description="Title row"),
+    required_resource_keys={"execution_params"},
+    config_schema={
+        "chunk_start": int,
+        "chunk_size": Field(int, default_value=CHUNK_SIZE, is_required=False)
+    })
 def get_titles_dataframe(context):
     titles_file = context.resources.execution_params["titles_file"]
+    chunk_start = context.op_config["chunk_start"]
+    chunk_size = context.op_config["chunk_size"]
     tdf = pd.read_csv(titles_file)
-    for (index, row) in tdf.iterrows():
+    #slice titles in the selected partition (if selected partition is out of bounds, no output is returned)
+    for (index, row) in tdf[chunk_start:chunk_size + chunk_start].iterrows():
         yield DynamicOutput(
             value=row,
             mapping_key=row["tconst"]
         )
 
-# @op(out=DynamicOut())
-# def get_foos():
-#     foos = [{"name": "Mary", "surname": "Sue"}, {"name": "Jerry", "surname": "Doe"}, {"name": "Bob", "surname": "Moe"}]
-#     for foo in foos:
-#         yield DynamicOutput(
-#             value=foo,
-#             mapping_key=foo["name"]
-#         )
-
-# @op
-# def print_foo(foo):
-#     logger = get_dagster_logger()
-#     logger.info(foo)
-
-# @graph
-# def print_graph(foo):
-#     print_foo(foo)
-
-# @graph
-# def print_graph2():
-#     foos = get_foos()
-#     foos.map(print_foo)
-
-@op(required_resource_keys={"database"})
+@op(
+    ins={"title": In(description="Title row"), "apis": In(list)},
+    out={"title_tuple": Out(tuple, description="Title row and api list")},
+    required_resource_keys={"database"})
 def download_title(context, title, apis):
     logger = get_dagster_logger()
     tconst = title["tconst"]
@@ -153,7 +150,7 @@ def download_title(context, title, apis):
             raise err
     return (title, apis)
 
-@op(required_resource_keys={"database"})
+@op(ins={"title_tuple": In(tuple, description="Title row and api list")}, required_resource_keys={"database"})
 def process_title(context, title_tuple):
     logger = get_dagster_logger()
     (title, apis) = title_tuple
@@ -186,7 +183,7 @@ def process_title(context, title_tuple):
 def title_graph(title, apis):
     return process_title(download_title(title, apis))
 
-@op(ins={"upstream": In(Nothing)}, required_resource_keys={"database"})
+@op(ins={"upstream": In(Nothing), "apis": In(list), "titles": In(list)}, required_resource_keys={"database"})
 def log_stats_from_db(context, apis, titles):
     logger = get_dagster_logger()
     stats = {}
@@ -199,16 +196,20 @@ def log_stats_from_db(context, apis, titles):
         stats[api["name"]] = api_stats
     logger.info("Statistics: {}".format(stats))
 
-@job(resource_defs={"database": mongodb_resource, "execution_params": make_values_resource()})
+############# Job definition
+@job(
+    config=chunk_config,
+    resource_defs={
+        "database": mongodb_resource,
+        "execution_params": make_values_resource(apis=Array(str), data_directory=str, titles_file=str, nginx_host=str, overwrite=bool, delay=int)
+    })
 def vertical_imdb_pipeline():
-    #foos = get_foos()
-    #foos.map(print_graph)
-    #print_graph2()
     apis = get_input_apis()
     titles = get_titles_dataframe()
 
     result = titles.map(lambda title: title_graph(title, apis))
 
+    #TODO keep one collection for each partition to track downl and proc for each partition or unique count?
     log_stats_from_db(apis, titles.collect(), upstream=result.collect())
 
 '''
