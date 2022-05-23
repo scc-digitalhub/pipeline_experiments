@@ -19,11 +19,6 @@ class MongoDBResource:
         #get or create Database obj
         self.db = self.client[db]
 
-    def read(self, collection_name: str):
-        #return a pymongo.cursor.Cursor
-        self.logger.info("Returning cursor for: {}".format(collection_name))
-        return self.db[collection_name].find()
-
     def count(self, collection_name: str) -> int:
         #NOTE: using collection metadata instead of counting docs one by one, result may be incorrect
         #e.g. in case of sharded clusters, unclean shutdown
