@@ -1,4 +1,4 @@
-# IMDb pipeline that connects to MongoDB to persist data
+# IMDb Prefect pipeline that connects to MongoDB to persist data
 # NOTE: To parallelize DB operations with mapping, mapped tasks must be completely self-contained, so
 # a resource_manager is not suitable for this scenario (see https://www.prefect.io/blog/orchestrating-elt-with-prefect-dbt-cloud-and-snowflake-part-3/)
 import os
@@ -13,7 +13,7 @@ from pymongo import MongoClient
 import prefect
 from prefect import task, Flow, Parameter, unmapped, flatten
 from prefect.engine import signals
-from prefect.executors import LocalDaskExecutor
+from prefect.executors import LocalDaskExecutor, DaskExecutor
 from prefect.triggers import any_successful
 from prefect.tasks.control_flow.filter import FilterTask
 
@@ -204,15 +204,18 @@ with Flow("IMDb Data Flow with MongoDB") as flow:
 
 if __name__=="__main__":
     flow.run(
-        executor=LocalDaskExecutor(),
+        #executor=LocalDaskExecutor(), #same as scheduler="threads", multiple threads with Dask local scheduler
+        executor=LocalDaskExecutor(scheduler="processes"), #multiple processes with Dask local scheduler
+        #executor=DaskExecutor(), #multiple workers, temporary local Dask cluster with Dask distributed scheduler
         parameters={
             "apis": ["credits", "fooo", "business"],
-            "data_directory": "C:/Users/Erica.Tomaselli/pipelines_scripts/tmp",
-            "titles_file": "C:/Users/Erica.Tomaselli/pipelines_scripts/tmp/titles.csv",
-            "nginx_host": "localhost",
-            "overwrite": False,
+            "data_directory": "/Users/erica/pipeline_experiments/tmp",
+            "titles_file": "/Users/erica/pipeline_experiments/tmp/titles.csv",
+            "nginx_host": "localhost:8080",
+            "overwrite": True,
             "database": {"host": "localhost", "port": 27017, "db_name": "prefect_imdb"},
-            "chunk_start": 0
+            "chunk_start": 0,
+            "chunk_size": 15
         }
     )
     flow.visualize()

@@ -1,0 +1,10 @@
+{
+    "apis": ["credits", "fooo", "business"],
+    "data_directory": "/Users/erica/pipeline_experiments/tmp",
+    "titles_file": "/Users/erica/pipeline_experiments/tmp/titles.csv",
+    "nginx_host": "localhost:8080",
+    "overwrite": true,
+    "database": {"host": "localhost", "port": 27017, "db_name": "airflow_imdb"},
+    "chunk_start": 0,
+    "chunk_size": 15
+}

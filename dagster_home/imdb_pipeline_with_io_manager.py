@@ -215,9 +215,9 @@ resources:
   execution_params:
     config:
       apis: ["credits", "fooo", "business"]
-      data_directory: "C:/Users/Erica.Tomaselli/pipelines_scripts/tmp"
-      titles_file: "C:/Users/Erica.Tomaselli/pipelines_scripts/tmp/titles.csv"
-      nginx_host: "localhost"
+      data_directory: "/Users/erica/pipeline_experiments/tmp"
+      titles_file: "/Users/erica/pipeline_experiments/tmp/titles.csv"
+      nginx_host: "localhost:8080"
       delay: 0
   storage_io:
     config:
